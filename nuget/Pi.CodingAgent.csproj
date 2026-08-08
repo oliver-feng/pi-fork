@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <!-- The launcher is pure managed code, so one package serves win-x64 and
+         linux-x64 alike. Roll forward so a host with only a newer runtime works. -->
+    <RollForward>LatestMajor</RollForward>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <AssemblyName>pi-launcher</AssemblyName>
+    <RootNamespace>Pi.CodingAgent</RootNamespace>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>pi-fork</ToolCommandName>
+    <PackageId>Pi.CodingAgent</PackageId>
+    <Version>0.0.0-dev</Version>
+    <Authors>Mario Zechner</Authors>
+    <Description>Runnable package of the pi coding agent CLI. Bundles the built JavaScript payload and launches it with the Node.js runtime found on the host (Node.js 22.19 or newer required).</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>coding-agent;ai;llm;cli;tui;agent</PackageTags>
+    <IncludeSymbols>false</IncludeSymbols>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- The payload is JavaScript plus a few native .node addons; NuGet's
+         assembly-placement and install-script warnings do not apply to a tool
+         payload, and node_modules dotfiles must survive packing verbatim. -->
+    <NoDefaultExcludes>true</NoDefaultExcludes>
+    <NoWarn>$(NoWarn);NU5100;NU5111;NU5118;NU5119</NoWarn>
+  </PropertyGroup>
+
+  <!-- The staged payload is produced by scripts/package-nuget.mjs. Default item
+       globs are turned off for it so the tree is included exactly once, with the
+       relative layout the launcher expects. -->
+  <PropertyGroup>
+    <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="payload/**" />
+    <EmbeddedResource Remove="payload/**" />
+    <None Include="payload/**/*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>
