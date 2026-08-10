@@ -1,4 +1,4 @@
-# Pi.CodingAgent
+# Pi.CodingAgent.Contained
 
 A runnable NuGet packaging of the [pi](https://github.com/earendil-works/pi) coding agent CLI,
 built as a .NET global tool so it can be published to an Azure Artifacts feed and installed
@@ -18,15 +18,18 @@ so other platforms with .NET and Node.js work too).
 ## Install
 
 ```sh
-dotnet tool install -g Pi.CodingAgent --add-source <feed-or-directory>
+dotnet tool install -g Pi.CodingAgent.Contained --version 0.84.1-beta.1 --add-source <feed-or-directory>
 pi-fork --version
 ```
 
 From an Azure Artifacts feed:
 
 ```sh
-dotnet tool install -g Pi.CodingAgent --add-source https://pkgs.dev.azure.com/<org>/_packaging/<feed>/nuget/v3/index.json
+dotnet tool install -g Pi.CodingAgent.Contained --version 0.84.1-beta.1 --add-source https://pkgs.dev.azure.com/<org>/_packaging/<feed>/nuget/v3/index.json
 ```
+
+The published versions are prereleases, so `dotnet tool install` will not pick one up without
+an explicit `--version` (or `--prerelease`).
 
 ## Use
 
@@ -55,6 +58,20 @@ build rather than whatever the registry serves, prunes type-only files, and runs
 The `.nupkg` lands in `.artifacts/nuget`.
 
 Useful flags: `--skip-build`, `--skip-stage`, `--skip-pack`, `--version <v>`, `--out <dir>`.
+
+### Versioning
+
+The version lives in one place: `PACKAGE_VERSION` in `scripts/package-nuget.mjs`, currently
+`0.84.1-beta.1`. Bump the prerelease label there for each build that goes to the feed —
+`0.84.1-beta.2`, and so on. `--version <v>` still overrides it for a one-off build.
+
+It is deliberately not taken from `packages/coding-agent/package.json`. That number is upstream
+pi's, so merging upstream would silently change what this package claims to be, and two builds
+of the same upstream version could not be told apart.
+
+The label needs its SemVer hyphen — `0.84.1-beta.1`, not `0.84.1.beta.1`. NuGet requires a
+numeric fourth component, so the dotted form is rejected. Prereleases also sort *below* the
+plain release, so `0.84.1-beta.2` is older than `0.84.1` as far as NuGet is concerned.
 
 ## Troubleshooting
 

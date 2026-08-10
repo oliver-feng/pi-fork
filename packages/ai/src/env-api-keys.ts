@@ -23,6 +23,7 @@ if (typeof process !== "undefined" && (process.versions?.node || process.version
 	});
 }
 
+import { isAzureManagedIdentityAvailable } from "./azure-managed-identity.ts";
 import type { KnownProvider, ProviderEnv } from "./types.ts";
 import { getProviderEnvValue } from "./utils/provider-env.ts";
 
@@ -160,6 +161,20 @@ export function getEnvApiKey(provider: string, env?: ProviderEnv): string | unde
 		const hasLocation = !!getProviderEnvValue("GOOGLE_CLOUD_LOCATION", env);
 
 		if (hasCredentials && hasProject && hasLocation) {
+			return "<authenticated>";
+		}
+	}
+
+	// Azure AI Foundry accepts either an explicit key or the process's managed identity. The
+	// endpoint is required as well: an identity alone says nothing about which resource to reach,
+	// and every process running in Azure has one, so identity by itself would report this provider
+	// as configured everywhere.
+	if (provider === "azure-openai-responses") {
+		const hasEndpoint = !!(
+			getProviderEnvValue("AZURE_OPENAI_BASE_URL", env) || getProviderEnvValue("AZURE_OPENAI_RESOURCE_NAME", env)
+		);
+
+		if (hasEndpoint && isAzureManagedIdentityAvailable(env)) {
 			return "<authenticated>";
 		}
 	}

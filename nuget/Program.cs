@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace Pi.CodingAgent;
+namespace Pi.CodingAgent.Contained;
 
 /// <summary>
 /// Thin launcher for the packaged pi coding agent. The package carries the

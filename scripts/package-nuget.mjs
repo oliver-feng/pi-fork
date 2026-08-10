@@ -34,7 +34,7 @@ Options:
   --skip-build    Reuse the existing dist output instead of rebuilding
   --skip-stage    Reuse the existing nuget/payload staging directory
   --skip-pack     Stage the payload but do not run dotnet pack
-  --version <v>   Package version (defaults to the coding agent version)
+  --version <v>   Package version (defaults to PACKAGE_VERSION in this script)
   --out <dir>     Output directory for the .nupkg (default .artifacts/nuget)
   --help          Show this help
 `);
@@ -92,6 +92,31 @@ function readPackageJson(directory) {
 function fileSpecifier(fromDirectory, file) {
 	const relativePath = relative(fromDirectory, file).replaceAll("\\", "/");
 	return `file:${relativePath.startsWith(".") ? relativePath : `./${relativePath}`}`;
+}
+
+/**
+ * Stamp the packaged version onto the staged agent so `pi-fork --version` reports it.
+ *
+ * config.ts derives VERSION by reading the agent's own package.json at runtime, which carries
+ * upstream pi's number. Left alone, a package built as 0.84.1-beta.2 would still report 0.84.1,
+ * so the running binary could not be told apart from any other build of the same upstream
+ * release.
+ *
+ * Rewriting the staged copy rather than packages/coding-agent/package.json keeps this a
+ * packaging concern: the checkout stays at upstream's version, so merges do not conflict over
+ * it, and nothing but the artifact changes.
+ */
+function stampPayloadVersion(payloadDirectory, packageVersion) {
+	const agentDirectory = join(payloadDirectory, "node_modules", "@earendil-works", "pi-coding-agent");
+	const manifestPath = join(agentDirectory, "package.json");
+	if (!existsSync(manifestPath)) {
+		throw new Error(`Staged payload is missing the agent manifest: ${manifestPath}`);
+	}
+
+	const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+	manifest.version = packageVersion;
+	writeFileSync(manifestPath, `${JSON.stringify(manifest, undefined, "\t")}\n`);
+	console.log(`Stamped payload version ${packageVersion}`);
 }
 
 function packPackage(pkg, tarballDirectory) {
@@ -163,8 +188,18 @@ if (readPackageJson(repoRoot).name !== "pi-monorepo") {
 	throw new Error("Run this script from the repository root");
 }
 
-const codingAgentVersion = readPackageJson("packages/coding-agent").version;
-const version = options.version ?? codingAgentVersion;
+// The published version of this fork. Bump the prerelease label here for each
+// build that goes to the feed -- beta.1, beta.2, and so on.
+//
+// Deliberately not read from packages/coding-agent/package.json: that number is
+// upstream pi's, so merging upstream would silently change what this package
+// claims to be, and two builds of the same upstream version could not be told
+// apart. The prerelease label needs its SemVer hyphen (0.84.1-beta.1, not
+// 0.84.1.beta.1) -- NuGet requires a numeric fourth component, so the dotted
+// form is rejected outright.
+const PACKAGE_VERSION = "0.84.1-beta.2";
+
+const version = options.version ?? PACKAGE_VERSION;
 const projectDirectory = join(repoRoot, "nuget");
 const payloadDirectory = join(projectDirectory, "payload");
 const artifactDirectory = resolve(options.out ?? join(repoRoot, ".artifacts", "nuget"));
@@ -202,6 +237,7 @@ if (!options.skipStage) {
 	rmSync(join(payloadDirectory, "package-lock.json"), { force: true });
 
 	prunePayload(join(payloadDirectory, "node_modules"));
+	stampPayloadVersion(payloadDirectory, version);
 }
 
 const entryPoint = join(payloadDirectory, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "cli.js");
@@ -213,16 +249,16 @@ if (!options.skipPack) {
 	mkdirSync(artifactDirectory, { recursive: true });
 	run("dotnet", [
 		"pack",
-		join(projectDirectory, "Pi.CodingAgent.csproj"),
+		join(projectDirectory, "Pi.CodingAgent.Contained.csproj"),
 		"--configuration",
 		"Release",
 		`-p:Version=${version}`,
 		"--output",
 		artifactDirectory,
 	]);
-	console.log(`\nPacked ${join(artifactDirectory, `Pi.CodingAgent.${version}.nupkg`)}`);
+	console.log(`\nPacked ${join(artifactDirectory, `Pi.CodingAgent.Contained.${version}.nupkg`)}`);
 	console.log("\nInstall it with:");
-	console.log(`  dotnet tool install -g Pi.CodingAgent --version ${version} --add-source ${artifactDirectory}`);
+	console.log(`  dotnet tool install -g Pi.CodingAgent.Contained --version ${version} --add-source ${artifactDirectory}`);
 	console.log("  pi-fork --version");
 } else {
 	console.log(`\nStaged payload at ${payloadDirectory}`);

@@ -9,14 +9,14 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <InvariantGlobalization>true</InvariantGlobalization>
-    <AssemblyName>pi-launcher</AssemblyName>
-    <RootNamespace>Pi.CodingAgent</RootNamespace>
+    <AssemblyName>pi-contained-launcher</AssemblyName>
+    <RootNamespace>Pi.CodingAgent.Contained</RootNamespace>
   </PropertyGroup>
 
   <PropertyGroup>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>pi-fork</ToolCommandName>
-    <PackageId>Pi.CodingAgent</PackageId>
+    <PackageId>Pi.CodingAgent.Contained</PackageId>
     <Version>0.0.0-dev</Version>
     <Authors>Mario Zechner</Authors>
     <Description>Runnable package of the pi coding agent CLI. Bundles the built JavaScript payload and launches it with the Node.js runtime found on the host (Node.js 22.19 or newer required).</Description>

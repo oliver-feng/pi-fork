@@ -1,5 +1,6 @@
 import { AzureOpenAI } from "openai";
 import type { ResponseCreateParamsStreaming } from "openai/resources/responses/responses.js";
+import { getAzureManagedIdentityToken, isAzureManagedIdentityAvailable } from "../azure-managed-identity.ts";
 import { clampThinkingLevel } from "../models.ts";
 import type {
 	Api,
@@ -21,6 +22,8 @@ import { convertResponsesMessages, convertResponsesTools, processResponsesStream
 import { buildBaseOptions } from "./simple-options.ts";
 
 const DEFAULT_AZURE_API_VERSION = "v1";
+/** getEnvApiKey() returns this for ambient credentials, which are never a usable key. */
+const AMBIENT_AUTH_MARKER = "<authenticated>";
 const AZURE_TOOL_CALL_PROVIDERS = new Set(["openai", "openai-codex", "opencode", "azure-openai-responses"]);
 // OpenAI Responses rejects max_output_tokens below 16: https://github.com/earendil-works/pi/issues/6265
 const OPENAI_RESPONSES_MIN_OUTPUT_TOKENS = 16;
@@ -50,6 +53,30 @@ function resolveDeploymentName(model: Model<"azure-openai-responses">, options?:
 
 function formatAzureOpenAIError(error: unknown): string {
 	return formatProviderError(normalizeProviderError(error), "Azure OpenAI API error");
+}
+
+/** The ambient marker stands in for a credential; it is not one. */
+function isUsableApiKey(apiKey: string | undefined): apiKey is string {
+	return typeof apiKey === "string" && apiKey.trim().length > 0 && apiKey !== AMBIENT_AUTH_MARKER;
+}
+
+/**
+ * How this request authenticates.
+ *
+ * An explicitly configured key always wins. Managed identity is the fallback, so a deployment that
+ * sets no key at all still reaches Azure AI Foundry automatically.
+ */
+function resolveAzureAuth(options?: AzureOpenAIResponsesOptions): "api-key" | "managed-identity" | "none" {
+	if (isUsableApiKey(options?.apiKey)) return "api-key";
+	if (isAzureManagedIdentityAvailable(options?.env)) return "managed-identity";
+	return "none";
+}
+
+function missingCredentialsError(provider: string): Error {
+	return new Error(
+		`No API key for provider: ${provider}. Set AZURE_OPENAI_API_KEY, or run where Azure assigns ` +
+			`the process a managed identity so it can authenticate without one.`,
+	);
 }
 
 // Azure OpenAI Responses-specific options
@@ -96,11 +123,11 @@ export const stream: StreamFunction<"azure-openai-responses", AzureOpenAIRespons
 
 		try {
 			// Create Azure OpenAI client
-			const apiKey = options?.apiKey;
-			if (!apiKey) {
-				throw new Error(`No API key for provider: ${model.provider}`);
+			const auth = resolveAzureAuth(options);
+			if (auth === "none") {
+				throw missingCredentialsError(model.provider);
 			}
-			const client = createClient(model, apiKey, options);
+			const client = createClient(model, auth, options);
 			const grammarToolInputProperties = createGrammarToolInputProperties(
 				context.tools,
 				model.compat?.supportsOpenAIGrammarTools ?? false,
@@ -164,8 +191,10 @@ export const streamSimple: StreamFunction<"azure-openai-responses", SimpleStream
 	options?: SimpleStreamOptions,
 ): AssistantMessageEventStream => {
 	const apiKey = options?.apiKey;
-	if (!apiKey) {
-		throw new Error(`No API key for provider: ${model.provider}`);
+	// Managed identity supplies the credential later, in createClient, so an absent key is only
+	// fatal when there is no identity to fall back on either.
+	if (!isUsableApiKey(apiKey) && !isAzureManagedIdentityAvailable(options?.env)) {
+		throw missingCredentialsError(model.provider);
 	}
 
 	const base = buildBaseOptions(model, context, options, apiKey);
@@ -248,7 +277,11 @@ function resolveAzureConfig(
 	};
 }
 
-function createClient(model: Model<"azure-openai-responses">, apiKey: string, options?: AzureOpenAIResponsesOptions) {
+function createClient(
+	model: Model<"azure-openai-responses">,
+	auth: "api-key" | "managed-identity",
+	options?: AzureOpenAIResponsesOptions,
+) {
 	const headers = { ...model.headers };
 
 	if (options?.headers) {
@@ -257,14 +290,25 @@ function createClient(model: Model<"azure-openai-responses">, apiKey: string, op
 
 	const { baseUrl, apiVersion } = resolveAzureConfig(model, options);
 
-	return new AzureOpenAI({
-		apiKey,
+	const common = {
 		apiVersion,
 		dangerouslyAllowBrowser: true,
 		fetch: options?.fetch,
 		defaultHeaders: headers,
 		baseURL: baseUrl,
-	});
+	};
+
+	// apiKey and azureADTokenProvider are mutually exclusive -- AzureOpenAI throws when given both
+	// -- so exactly one is passed. The provider is called per request and its result becomes
+	// `Authorization: Bearer`; caching lives in azure-managed-identity.ts, so it stays cheap.
+	if (auth === "managed-identity") {
+		return new AzureOpenAI({
+			...common,
+			azureADTokenProvider: () => getAzureManagedIdentityToken(options?.env),
+		});
+	}
+
+	return new AzureOpenAI({ ...common, apiKey: options?.apiKey });
 }
 
 function buildParams(
