@@ -197,7 +197,7 @@ if (readPackageJson(repoRoot).name !== "pi-monorepo") {
 // apart. The prerelease label needs its SemVer hyphen (0.84.1-beta.1, not
 // 0.84.1.beta.1) -- NuGet requires a numeric fourth component, so the dotted
 // form is rejected outright.
-const PACKAGE_VERSION = "0.84.1-beta.3";
+const PACKAGE_VERSION = "0.84.1-beta.4";
 
 const version = options.version ?? PACKAGE_VERSION;
 const projectDirectory = join(repoRoot, "nuget");
