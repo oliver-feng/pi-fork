@@ -45,9 +45,9 @@ function resolveAzureModel(model: Model<Api>, options: StreamOptions | undefined
 	return { ...model, baseUrl: resolveAzureBaseUrl(model, options) };
 }
 
-async function withAzureAuth<T extends StreamOptions>(options: T | undefined): Promise<T | undefined> {
+async function withAzureAuth<T extends StreamOptions>(options: T | undefined) {
 	const apiKey = options?.apiKey || getEnvApiKey("azure", options?.env);
-	if (apiKey && apiKey !== "<authenticated>") return { ...options, apiKey } as T;
+	if (apiKey && apiKey !== "<authenticated>") return { ...options, apiKey };
 	if (
 		!isAzureManagedIdentityAvailable(options?.env) ||
 		Object.entries(options?.headers ?? {}).some(([name, value]) => name.toLowerCase() === "authorization" && value)
@@ -55,7 +55,7 @@ async function withAzureAuth<T extends StreamOptions>(options: T | undefined): P
 		return options;
 	}
 	const token = await getAzureManagedIdentityToken(options?.env);
-	return { ...options, apiKey: undefined, headers: { ...options?.headers, Authorization: `Bearer ${token}` } } as T;
+	return { ...options, apiKey: undefined, headers: { ...options?.headers, Authorization: `Bearer ${token}` } };
 }
 
 /** Send the deployment name as the request's model, keeping `model.id` as the catalog id. */
