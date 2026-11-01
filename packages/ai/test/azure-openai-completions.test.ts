@@ -6,6 +6,7 @@ import type { AssistantMessage, Context } from "../src/types.ts";
 interface FakeOpenAIClientOptions {
 	apiKey: string;
 	baseURL: string;
+	defaultHeaders?: Record<string, string | null>;
 }
 
 interface CapturedCompletionsPayload {
@@ -214,6 +215,36 @@ describe("azure deepseek-v4-pro over Chat Completions", () => {
 });
 
 describe("azure Chat Completions endpoint resolution", () => {
+	it("authorizes completions with managed identity instead of a placeholder API key", async () => {
+		const result = await azure
+			.streamSimple(deepSeekModel(), context, {
+				env: {
+					AZURE_OPENAI_BASE_URL: "https://my-resource.services.ai.azure.com",
+					AZURE_OPENAI_TOKEN: "managed-token",
+				},
+			})
+			.result();
+
+		expect(result.stopReason).toBe("stop");
+		expect(mockState.lastClientOptions?.defaultHeaders?.Authorization).toBe("Bearer managed-token");
+		expect(mockState.lastClientOptions?.apiKey).toBe("unused");
+	});
+
+	it("keeps an explicit key ahead of managed identity for completions", async () => {
+		await azure
+			.stream(deepSeekModel(), context, {
+				apiKey: "explicit-key",
+				env: {
+					AZURE_OPENAI_BASE_URL: "https://my-resource.services.ai.azure.com",
+					AZURE_OPENAI_TOKEN: "managed-token",
+				},
+			})
+			.result();
+
+		expect(mockState.lastClientOptions?.apiKey).toBe("explicit-key");
+		expect(mockState.lastClientOptions?.defaultHeaders?.Authorization).toBeUndefined();
+	});
+
 	it("normalizes the Azure endpoint the completions client is built with", async () => {
 		await azure.stream(deepSeekModel(), context, { apiKey: "test-key" }).result();
 
